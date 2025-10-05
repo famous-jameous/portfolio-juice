@@ -1,1 +1,812 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TI-84 Mini Prototype (Vanilla JS)</title>
+<style>
+  :root{
+    --device-w: 520px;
+    --device-h: 840px;
+    --bg: #2b2b2b;
+    --accent: #98bfe3;
+    --key-bg: #ddd;
+    --key-dark: #bdbdbd;
+    --screen-bg: #d7e6ef;
+    --pixel-font: "Courier New", monospace;
+  }
+  body{
+    background: linear-gradient(180deg,#111 0%, #222 100%);
+    font-family: var(--pixel-font);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    margin:0;
+    color:#eee;
+  }
+  .device{
+    width:var(--device-w);
+    height:var(--device-h);
+    background:linear-gradient(180deg,#1f2a33,#11161a);
+    border-radius:18px;
+    padding:18px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.7);
+    box-sizing:border-box;
+  }
+  .top-row{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+  .speaker {
+    width:72px;height:10px;background:#0b2a3a;border-radius:6px;
+    box-shadow:inset 0 -2px 6px rgba(0,0,0,0.4);
+  }
+  .screen-frame{
+    width:100%;
+    background:linear-gradient(180deg,#21323a,#0b1a20);
+    border-radius:8px;
+    padding:10px;
+    box-sizing:border-box;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .display {
+    height:120px;
+    background:var(--screen-bg);
+    border-radius:6px;
+    padding:6px;
+    box-sizing:border-box;
+    position:relative;
+    overflow:hidden;
+  }
+  /* canvas will be pixelated */
+  #homeCanvas {
+    width:100%;
+    height:100%;
+    image-rendering: pixelated;
+    display:block;
+    border-radius:4px;
+    background: #e6f2f8;
+  }
+  .row{
+    display:flex;
+    gap:8px;
+  }
+  .keypad{
+    margin-top:12px;
+    display:grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap:8px;
+  }
 
+  button.key{
+    background:var(--key-bg);
+    border-radius:6px;
+    padding:10px 6px;
+    border:1px solid rgba(0,0,0,0.1);
+    box-shadow: 0 3px #aaa;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+    user-select:none;
+  }
+  button.key:active{ transform: translateY(2px); box-shadow: 0 1px #666; }
+  .key.small{ font-size:12px; padding:6px 4px; }
+  .key.dark{ background:var(--key-dark); color:#111; }
+  .key.accent{ background:var(--accent); color:#012; }
+  .wide{ grid-column: span 2; }
+  .xsmall{ font-size:11px; padding:4px 6px; }
+
+  .panel-bottom{
+    display:flex;
+    gap:8px;
+    margin-top:10px;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .status {
+    font-size:12px;color:#cfe7f7;
+  }
+  .y-editor{
+    display:flex;
+    gap:8px;
+    align-items:center;
+  }
+  .y-editor input{
+    font-family:var(--pixel-font);
+    font-size:13px;
+    padding:6px 8px;
+    border-radius:6px;border:1px solid rgba(0,0,0,0.2);
+    width:260px;
+  }
+
+  /* graph overlay modal */
+  .graph-modal{
+    position:fixed;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+    width:800px;height:600px;
+    background:#0b1b22;border-radius:10px;padding:12px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.8);
+    display:none;
+    flex-direction:column;
+    z-index:9999;
+  }
+  .graph-modal.show{ display:flex; }
+  .graph-canvas{
+    flex:1;
+    background:#fff;
+    border-radius:6px;
+    image-rendering: pixelated;
+  }
+  .gm-top{ display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .btn-close{ background:#c94f4f;color:#fff;border-radius:6px;padding:6px 10px;border:none;cursor:pointer;}
+  .info-box{ color:#cfe7f7; font-size:13px; margin-left:auto; }
+
+  /* small touches */
+  .legend-small{ font-size:10px; color:#333; display:block; text-align:center; margin-top:4px; }
+  .footer-note{ font-size:12px; color:#9fb7c9; margin-top:10px; }
+  @media(max-width:900px){
+    .graph-modal{ width:92%; height:60vh; }
+  }
+</style>
+</head>
+<body>
+<div class="device" role="application" aria-label="TI84 Mini Prototype">
+  <div class="top-row">
+    <div class="speaker" aria-hidden></div>
+    <div style="flex:1"></div>
+    <div style="color:#9fb7c9;font-weight:700">TI-84 Mini (demo)</div>
+  </div>
+
+  <div class="screen-frame">
+    <div class="display" aria-live="polite">
+      <canvas id="homeCanvas" width="480" height="120"></canvas>
+    </div>
+
+    <div class="y-editor">
+      <label style="font-size:12px;color:#cfe7f7">Y1 =</label>
+      <input id="yinput" value="sin(x)" aria-label="Y1 expression" />
+      <button id="btnGraph" class="key dark small">GRAPH</button>
+      <span style="color:#9fb7c9;font-size:12px;margin-left:6px">Use x variable. Example: sin(x) + 0.5*x</span>
+    </div>
+  </div>
+
+  <div style="height:14px"></div>
+
+  <div class="keypad" id="keypad" aria-hidden="false">
+    <!-- row1 -->
+    <button class="key dark" data-key="2nd" id="key-2nd">2nd</button>
+    <button class="key dark" data-key="mode">MODE</button>
+    <button class="key dark" data-key="del">DEL</button>
+    <button class="key dark" data-key="clear">CLEAR</button>
+    <button class="key wide" data-key="(">(</button>
+    <button class="key wide" data-key=")">)</button>
+    <button class="key" data-key="^">^</button>
+    <button class="key" data-key="pi">π</button>
+    <button class="key" data-key="e">e</button>
+    <button class="key accent" data-key="ans">Ans</button>
+
+    <!-- row2 -->
+    <button class="key" data-key="7">7</button>
+    <button class="key" data-key="8">8</button>
+    <button class="key" data-key="9">9</button>
+    <button class="key" data-key="/">÷</button>
+    <button class="key" data-key="sin">sin</button>
+    <button class="key" data-key="cos">cos</button>
+    <button class="key" data-key="tan">tan</button>
+    <button class="key" data-key="asin" style="display:none">asin</button>
+    <button class="key" data-key="acos" style="display:none">acos</button>
+    <button class="key" data-key="atan" style="display:none">atan</button>
+
+    <!-- row3 -->
+    <button class="key" data-key="4">4</button>
+    <button class="key" data-key="5">5</button>
+    <button class="key" data-key="6">6</button>
+    <button class="key" data-key="*">×</button>
+    <button class="key" data-key="sqrt">√</button>
+    <button class="key" data-key="ln">ln</button>
+    <button class="key" data-key="log">log</button>
+    <button class="key" data-key="pow2">x²</button>
+    <button class="key" data-key="pow3" style="display:none">x³</button>
+    <button class="key" data-key="inv" style="display:none">1/x</button>
+
+    <!-- row4 -->
+    <button class="key" data-key="1">1</button>
+    <button class="key" data-key="2">2</button>
+    <button class="key" data-key="3">3</button>
+    <button class="key" data-key="-">−</button>
+    <button class="key" data-key="(">(</button>
+    <button class="key" data-key=")">( )</button>
+    <button class="key" data-key="x">x</button>
+    <button class="key wide" data-key="enter">ENTER</button>
+    <button class="key" data-key="left">◀</button>
+    <button class="key" data-key="right">▶</button>
+
+    <!-- row5 -->
+    <button class="key" data-key="0">0</button>
+    <button class="key" data-key=".">.</button>
+    <button class="key" data-key="+">+</button>
+    <button class="key wide" data-key="graph">GRAPH</button>
+    <button class="key small" data-key="up">▲</button>
+    <button class="key small" data-key="down">▼</button>
+    <button class="key small" data-key="pi2" title="unused"></button>
+    <button class="key small" data-key="pi3" title="unused"></button>
+    <button class="key small" data-key="pi4" title="unused"></button>
+    <button class="key small" data-key="pi5" title="unused"></button>
+  </div>
+
+  <div class="panel-bottom">
+    <div class="status" id="status">Mode: Radian | 2nd: OFF</div>
+    <div style="color:#9fb7c9;font-size:12px">Prototype — functions subset only</div>
+  </div>
+
+  <div class="footer-note">Click Y= to edit expression or type into Y1 input. Press GRAPH to visualize.</div>
+</div>
+
+<!-- Graph Modal -->
+<div class="graph-modal" id="graphModal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="gm-top">
+    <button class="btn-close" id="closeGraph">Close</button>
+    <div style="display:flex;gap:8px;align-items:center;margin-left:8px">
+      <label style="color:#cfe7f7">Xmin</label><input id="xmin" value="-10" style="width:60px;padding:6px;border-radius:6px" />
+      <label style="color:#cfe7f7">Xmax</label><input id="xmax" value="10" style="width:60px;padding:6px;border-radius:6px" />
+      <label style="color:#cfe7f7">Ymin</label><input id="ymin" value="-10" style="width:60px;padding:6px;border-radius:6px" />
+      <label style="color:#cfe7f7">Ymax</label><input id="ymax" value="10" style="width:60px;padding:6px;border-radius:6px" />
+      <button class="key small" id="replot">Replot</button>
+      <div class="info-box">Trace: arrow keys | Zoom by changing window</div>
+    </div>
+  </div>
+  <canvas id="graphCanvas" class="graph-canvas" width="760" height="460"></canvas>
+</div>
+
+<script>
+/*
+  TI-84 Mini Prototype JS
+  - Implements a pixel canvas display, keypad interactions, a shunting-yard parser, RPN evaluator.
+  - Graphing of single Y1 expression with x variable.
+  - 2nd key toggles certain behaviors (inverse trig, alternate key labels).
+*/
+
+// ---------- Utility: DOM helpers ----------
+const qs = (sel)=>document.querySelector(sel);
+const qsa = (sel)=>Array.from(document.querySelectorAll(sel));
+
+// ---------- App State ----------
+const State = {
+  second: false,
+  ans: 0,
+  displayStr: '',      // string shown on home screen
+  cursorPos: 0,
+  y1: 'sin(x)',
+  mode: 'radian',
+  graph: { xmin:-10, xmax:10, ymin:-10, ymax:10, traceX:0 }
+};
+
+// ---------- Home canvas rendering (pixel-style) ----------
+const homeCanvas = qs('#homeCanvas');
+const hctx = homeCanvas.getContext('2d', { alpha: false });
+function drawHome(){
+  // logical resolution is canvas width x height (pixels)
+  const w = homeCanvas.width;
+  const h = homeCanvas.height;
+  // background
+  hctx.fillStyle = '#e6f2f8';
+  hctx.fillRect(0,0,w,h);
+
+  // top bar (small)
+  hctx.fillStyle = '#0b2a3a';
+  hctx.fillRect(0,0,w,16);
+
+  // display text (left aligned, monospace feel)
+  hctx.font = '14px monospace';
+  hctx.fillStyle = '#072b3a';
+  // label
+  hctx.fillText('HOME', 8, 14);
+
+  // main expression area
+  hctx.font = '16px monospace';
+  hctx.fillStyle = '#05202a';
+  let text = State.displayStr || '';
+  // trimming if too long
+  if(text.length > 60) text = text.slice(text.length - 60);
+
+  // draw the text
+  hctx.fillText(text, 8, 54);
+
+  // cursor (simulate)
+  const metrics = hctx.measureText(text);
+  const cursorX = 8 + metrics.width;
+  const cursorY1 = 36;
+  const cursorY2 = 56;
+  hctx.fillRect(cursorX, cursorY1, 2, 14);
+
+  // show Ans
+  hctx.font = '12px monospace';
+  hctx.fillStyle = '#174a57';
+  hctx.fillText('Ans=' + (Number.isFinite(State.ans) ? (''+roundTo(State.ans,10)) : String(State.ans)), 8, 96);
+
+  // small mode indicator
+  hctx.fillStyle = '#003243';
+  hctx.fillRect(w - 120, 0, 120, 16);
+  hctx.fillStyle = '#bfe9ff';
+  hctx.font = '12px monospace';
+  hctx.fillText('Mode: ' + State.mode.toUpperCase(), w - 116, 14);
+}
+function roundTo(v, digits){
+  if(!isFinite(v)) return v;
+  const p = Math.pow(10, digits);
+  return Math.round(v * p) / p;
+}
+drawHome();
+
+// ---------- Keyboard / Keypad wiring ----------
+const keypad = qs('#keypad');
+qsa('#keypad button').forEach(btn=>{
+  btn.addEventListener('click', ()=>handleKey(btn.dataset.key));
+});
+qs('#btnGraph').addEventListener('click', ()=>openGraph());
+qs('#yinput').addEventListener('input', (e)=>{ State.y1 = e.target.value; });
+qs('#yinput').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ State.displayStr = State.y1; drawHome(); } });
+
+function handleKey(key){
+  if(key === '2nd'){ State.second = !State.second; updateSecondVisuals(); updateStatus(); return; }
+  if(key === 'clear'){ State.displayStr = ''; drawHome(); return; }
+  if(key === 'del'){ State.displayStr = State.displayStr.slice(0,-1); drawHome(); return;}
+  if(key === 'enter' || key === 'ans'){ // evaluate current expression and set Ans
+    try{
+      const val = evaluateExpression(State.displayStr || State.y1, { x: 0, Ans: State.ans });
+      if(isFinite(val)) State.ans = val;
+      else State.ans = NaN;
+      State.displayStr = String(val);
+    }catch(e){
+      State.displayStr = 'ERR';
+    }
+    drawHome(); return;
+  }
+  if(key === 'graph' || key === 'GRAPH'){ openGraph(); return; }
+  if(key === 'x'){ insertToDisplay('x'); return; }
+  if(key === 'pi'){ insertToDisplay('pi'); return; }
+  if(key === 'e'){ insertToDisplay('e'); return; }
+  if(key === '(' || key === ')'){ insertToDisplay(key); return; }
+  if(key === '+' || key === '-' || key === '*' || key === '/' || key === '^'){ insertToDisplay(' ' + key + ' '); return; }
+  if(key==='.' ) { insertToDisplay('.'); return; }
+  if(/^\d+$/.test(key)){ insertToDisplay(key); return; }
+
+  // functions (respect second state)
+  if(key === 'sin') { insertToDisplay(State.second ? 'asin(' : 'sin('); State.second=false; updateSecondVisuals(); updateStatus(); return; }
+  if(key === 'cos') { insertToDisplay(State.second ? 'acos(' : 'cos('); State.second=false; updateSecondVisuals(); updateStatus(); return; }
+  if(key === 'tan') { insertToDisplay(State.second ? 'atan(' : 'tan('); State.second=false; updateSecondVisuals(); updateStatus(); return; }
+  if(key === 'asin' || key==='acos' || key==='atan'){ insertToDisplay(key + '('); State.second=false; updateSecondVisuals(); updateStatus(); return; }
+  if(key === 'sqrt'){ insertToDisplay('sqrt('); return; }
+  if(key === 'ln'){ insertToDisplay('ln('); return; }
+  if(key === 'log'){ insertToDisplay('log('); return; }
+  if(key === 'pow2'){ insertToDisplay('^2'); return; }
+  if(key === 'pow3'){ insertToDisplay('^3'); return; }
+  if(key === 'inv'){ insertToDisplay('1/('); return; }
+
+  if(key === 'left'){ /* move trace or cursor */ State.displayStr = State.displayStr; drawHome(); return; }
+  if(key === 'right'){ State.displayStr = State.displayStr; drawHome(); return; }
+
+  // fallback
+  insertToDisplay(key);
+}
+function insertToDisplay(s){
+  // simple append insertion for demo
+  State.displayStr = (State.displayStr || '') + s;
+  drawHome();
+}
+function updateSecondVisuals(){
+  const secondOn = State.second;
+  // toggle visibility / labels for some keys (sin/cos/tan -> asin/acos/atan)
+  qsa('[data-key="asin"], [data-key="acos"], [data-key="atan"]').forEach(b=> b.style.display = secondOn ? 'inline-block' : 'none');
+  qsa('[data-key="pow3"]').forEach(b=> b.style.display = secondOn ? 'inline-block' : 'none');
+  qsa('[data-key="inv"]').forEach(b=> b.style.display = secondOn ? 'inline-block' : 'none');
+  // update label on the 2nd key to show status
+  const two = qs('#key-2nd');
+  two.classList.toggle('accent', secondOn);
+  two.textContent = secondOn ? '2nd*' : '2nd';
+}
+function updateStatus(){
+  qs('#status').textContent = `Mode: ${State.mode} | 2nd: ${State.second? 'ON':'OFF'}`;
+}
+updateStatus();
+
+// ---------- Expression parsing & evaluation (shunting-yard -> RPN evaluator) ----------
+/*
+ Supported:
+  - numbers (decimal)
+  - variables: x, Ans
+  - constants: pi, e
+  - operators: + - * / ^ (binary); unary - supported
+  - functions: sin, cos, tan, asin, acos, atan, sqrt, ln, log, abs
+*/
+function tokenize(str){
+  if(!str) return [];
+  const s = str.replace(/\s+/g,'');
+  const tokens = [];
+  let i=0;
+  while(i<s.length){
+    const ch = s[i];
+    // number (support decimal)
+    if(/\d|\./.test(ch)){
+      let j=i+1; while(j<s.length && /[\d.]/.test(s[j])) j++;
+      tokens.push({type:'num', val: parseFloat(s.slice(i,j))});
+      i=j; continue;
+    }
+    // identifier (letters)
+    if(/[a-zA-Z]/.test(ch)){
+      let j=i+1; while(j<s.length && /[a-zA-Z0-9_]/.test(s[j])) j++;
+      const id = s.slice(i,j);
+      tokens.push({type:'id', val: id});
+      i=j; continue;
+    }
+    // operators & parens
+    if(ch === '+'||ch==='-'||ch==='*'||ch==='/'||ch==='^'){
+      tokens.push({type:'op', val:ch}); i++; continue;
+    }
+    if(ch === '(' || ch === ')'){ tokens.push({type:'paren', val:ch}); i++; continue; }
+    // unknown
+    i++;
+  }
+  return tokens;
+}
+
+const OPS = {
+  '+': {prec:2, assoc:'L', fn:(a,b)=>a+b},
+  '-': {prec:2, assoc:'L', fn:(a,b)=>a-b},
+  '*': {prec:3, assoc:'L', fn:(a,b)=>a*b},
+  '/': {prec:3, assoc:'L', fn:(a,b)=>a/b},
+  '^': {prec:4, assoc:'R', fn:(a,b)=>Math.pow(a,b)}
+};
+
+const FUNCS = {
+  sin: v=> Math.sin(v),
+  cos: v=> Math.cos(v),
+  tan: v=> Math.tan(v),
+  asin: v=> Math.asin(v),
+  acos: v=> Math.acos(v),
+  atan: v=> Math.atan(v),
+  sqrt: v=> Math.sqrt(v),
+  ln: v=> Math.log(v),
+  log: v=> Math.log10 ? Math.log10(v) : Math.log(v)/Math.LN10,
+  abs: v=> Math.abs(v)
+};
+
+function shuntingYard(tokens){
+  const out = [];
+  const ops = [];
+  for(let i=0;i<tokens.length;i++){
+    const t = tokens[i];
+    if(t.type==='num' || t.type==='id'){ out.push(t); continue; }
+    if(t.type==='op'){
+      let o1 = t.val;
+      // handle unary minus: if previous token is start or operator or paren '('
+      const prev = tokens[i-1];
+      if(o1 === '-' && (!prev || (prev.type==='op' || (prev.type==='paren' && prev.val==='(')))){
+        // represent unary minus as 'u-'
+        o1 = 'u-';
+        OPS['u-'] = {prec:5, assoc:'R', unary:true, fn:(a)=>-a};
+      }
+      while(ops.length){
+        const top = ops[ops.length-1];
+        if(top.type !== 'op') break;
+        const o2 = top.val;
+        if( (OPS[o2].prec > OPS[o1].prec) || (OPS[o2].prec === OPS[o1].prec && OPS[o1].assoc === 'L') ){
+          out.push(ops.pop());
+        } else break;
+      }
+      ops.push({type:'op', val:o1});
+      continue;
+    }
+    if(t.type==='paren' && t.val==='('){ ops.push(t); continue; }
+    if(t.type==='paren' && t.val===')'){
+      while(ops.length && !(ops[ops.length-1].type==='paren' && ops[ops.length-1].val==='(')){
+        out.push(ops.pop());
+      }
+      ops.pop(); // remove '('
+      // if top of ops is a function id marker, move it
+      if(ops.length && ops[ops.length-1].type==='func'){
+        out.push(ops.pop());
+      }
+      continue;
+    }
+    if(t.type==='id'){
+      // to support functions we actually rely on id -> could be var or func
+      // handled above by pushing id tokens as-is
+    }
+  }
+  while(ops.length) out.push(ops.pop());
+  return out;
+}
+
+function toRPN(tokens){
+  // improved shunting yard with function handling
+  const output = [];
+  const stack = [];
+  for(let i=0;i<tokens.length;i++){
+    const t = tokens[i];
+    if(t.type==='num'){ output.push(t); continue; }
+    if(t.type==='id'){
+      // determine if function call follows '('
+      const next = tokens[i+1];
+      if(next && next.type==='paren' && next.val==='('){
+        // push function marker
+        stack.push({type:'func', val: t.val});
+      } else {
+        output.push(t);
+      }
+      continue;
+    }
+    if(t.type==='op'){
+      let o1 = t.val;
+      // unary minus detection
+      const prev = tokens[i-1];
+      if(o1 === '-' && (!prev || (prev.type==='op' || (prev.type==='paren' && prev.val==='(')))){
+        o1 = 'u-';
+        OPS['u-'] = {prec:5, assoc:'R', unary:true, fn:(a)=>-a};
+      }
+      while(stack.length){
+        const top = stack[stack.length-1];
+        if(top.type==='op'){
+          const o2 = top.val;
+          if( (OPS[o2].prec > OPS[o1].prec) || (OPS[o2].prec === OPS[o1].prec && OPS[o1].assoc === 'L') ){
+            output.push(stack.pop());
+            continue;
+          }
+        }
+        break;
+      }
+      stack.push({type:'op', val:o1});
+      continue;
+    }
+    if(t.type==='paren' && t.val==='('){ stack.push(t); continue; }
+    if(t.type==='paren' && t.val===')'){
+      while(stack.length && !(stack[stack.length-1].type==='paren' && stack[stack.length-1].val==='(')){
+        output.push(stack.pop());
+      }
+      stack.pop(); // remove '('
+      if(stack.length && stack[stack.length-1].type==='func') output.push(stack.pop());
+      continue;
+    }
+  }
+  while(stack.length) output.push(stack.pop());
+  return output;
+}
+
+function evaluateRPN(rpn, env){
+  const st = [];
+  for(const token of rpn){
+    if(token.type==='num'){ st.push(token.val); continue; }
+    if(token.type==='id'){
+      const name = token.val;
+      if(name === 'x') st.push(env.x !== undefined ? env.x : NaN);
+      else if(name === 'Ans') st.push(env.Ans !== undefined ? env.Ans : 0);
+      else if(name === 'pi') st.push(Math.PI);
+      else if(name === 'e') st.push(Math.E);
+      else {
+        // unknown identifier: push NaN
+        st.push(NaN);
+      }
+      continue;
+    }
+    if(token.type==='func'){
+      const fname = token.val;
+      // pop one arg (we only support single-arg funcs)
+      const a = st.pop();
+      const f = FUNCS[fname];
+      if(!f){ st.push(NaN); continue; }
+      const res = f(a);
+      st.push(res);
+      continue;
+    }
+    if(token.type==='op'){
+      const op = token.val;
+      if(op === 'u-'){
+        const a = st.pop();
+        st.push(-a); continue;
+      }
+      const b = st.pop();
+      const a = st.pop();
+      const fn = OPS[op].fn;
+      st.push(fn(a,b));
+    }
+  }
+  return st.length ? st.pop() : NaN;
+}
+
+function evaluateExpression(expr, env={x:0, Ans:0}){
+  // Tokenize intelligently to treat ids and parens
+  // (we allow identifiers followed by '(' to act as function => token 'func' will be produced by toRPN)
+  const rawTokens = [];
+  // simple tokenizer producing num, id, paren, op (without merging)
+  const s = (expr||'').replace(/\s+/g,'');
+  let i=0;
+  while(i<s.length){
+    const ch = s[i];
+    if(/\d|\./.test(ch)){
+      let j=i+1; while(j<s.length && /[\d.]/.test(s[j])) j++;
+      rawTokens.push({type:'num', val: parseFloat(s.slice(i,j))});
+      i=j; continue;
+    }
+    if(/[a-zA-Z]/.test(ch)){
+      let j=i+1; while(j<s.length && /[a-zA-Z0-9_]/.test(s[j])) j++;
+      rawTokens.push({type:'id', val: s.slice(i,j)});
+      i=j; continue;
+    }
+    if(ch==='+'||ch==='-'||ch==='*'||ch==='/'||ch==='^'){ rawTokens.push({type:'op', val:ch}); i++; continue; }
+    if(ch==='('||ch===')'){ rawTokens.push({type:'paren', val:ch}); i++; continue; }
+    i++;
+  }
+  const rpn = toRPN(rawTokens);
+  // rpn may include function markers in objects of type 'func' left over from toRPN (we ensured them)
+  // Convert 'func' stack marker format to token type accepted by evaluator
+  // toRPN pushes {type:'func', val: name} tokens into rpn; evaluateRPN knows how to handle token.type==='func'
+  const result = evaluateRPN(rpn, env);
+  return result;
+}
+
+// ---------- Graphing ----------
+const graphModal = qs('#graphModal');
+const graphCanvas = qs('#graphCanvas');
+const gctx = graphCanvas.getContext('2d', { alpha: false });
+
+qs('#closeGraph').addEventListener('click', ()=>{ graphModal.classList.remove('show'); graphModal.setAttribute('aria-hidden','true'); });
+qs('#replot').addEventListener('click', ()=>{ State.graph.xmin = parseFloat(qs('#xmin').value); State.graph.xmax = parseFloat(qs('#xmax').value); State.graph.ymin = parseFloat(qs('#ymin').value); State.graph.ymax = parseFloat(qs('#ymax').value); plotGraph(); });
+
+function openGraph(){
+  // populate window values
+  qs('#xmin').value = State.graph.xmin;
+  qs('#xmax').value = State.graph.xmax;
+  qs('#ymin').value = State.graph.ymin;
+  qs('#ymax').value = State.graph.ymax;
+  graphModal.classList.add('show');
+  graphModal.setAttribute('aria-hidden','false');
+  plotGraph();
+}
+
+function plotGraph(){
+  const w = graphCanvas.width;
+  const h = graphCanvas.height;
+  // clear
+  gctx.fillStyle = '#ffffff';
+  gctx.fillRect(0,0,w,h);
+
+  // window
+  const xmin = parseFloat(qs('#xmin').value);
+  const xmax = parseFloat(qs('#xmax').value);
+  const ymin = parseFloat(qs('#ymin').value);
+  const ymax = parseFloat(qs('#ymax').value);
+
+  // draw grid lines and axes (four quadrants)
+  gctx.strokeStyle = '#e6e6e6';
+  gctx.lineWidth = 1;
+  // vertical grid every 1 unit
+  const xRange = xmax - xmin;
+  const yRange = ymax - ymin;
+  const xStep = Math.max(1, Math.round(xRange/10)/1);
+  const yStep = Math.max(1, Math.round(yRange/10)/1);
+
+  // draw vertical grid
+  for(let x = Math.ceil(xmin); x<=xmax; x+=1){
+    const px = mapX(x, xmin, xmax, w);
+    gctx.beginPath();
+    gctx.moveTo(px, 0); gctx.lineTo(px, h); gctx.stroke();
+  }
+  // horizontal grid
+  for(let y = Math.ceil(ymin); y<=ymax; y+=1){
+    const py = mapY(y, ymin, ymax, h);
+    gctx.beginPath();
+    gctx.moveTo(0, py); gctx.lineTo(w, py); gctx.stroke();
+  }
+
+  // axes (thicker)
+  gctx.strokeStyle = '#000000';
+  gctx.lineWidth = 2;
+  // y-axis at x=0 if visible
+  if(xmin <= 0 && xmax >= 0){
+    const x0 = mapX(0, xmin, xmax, w);
+    gctx.beginPath(); gctx.moveTo(x0, 0); gctx.lineTo(x0, h); gctx.stroke();
+  }
+  // x-axis at y=0 if visible
+  if(ymin <= 0 && ymax >= 0){
+    const y0 = mapY(0, ymin, ymax, h);
+    gctx.beginPath(); gctx.moveTo(0, y0); gctx.lineTo(w, y0); gctx.stroke();
+  }
+
+  // draw the function y = Y1
+  const expr = qs('#yinput').value || State.y1 || 'sin(x)';
+  gctx.strokeStyle = '#c41f72';
+  gctx.lineWidth = 2;
+  gctx.beginPath();
+  let prevValid = false;
+  const pxStep = 1; // one pixel per step
+  for(let px=0; px<=w; px+=pxStep){
+    const x = unmapX(px, xmin, xmax, w);
+    let y;
+    try{
+      y = evaluateExpression(expr, { x:x, Ans: State.ans });
+      if(!isFinite(y) || Math.abs(y) > 1e8) throw new Error('bad');
+      const py = mapY(y, ymin, ymax, h);
+      if(prevValid){
+        gctx.lineTo(px, py);
+      } else {
+        gctx.moveTo(px, py);
+      }
+      prevValid = true;
+    }catch(e){
+      // treat as discontinuity; moveTo next valid
+      prevValid = false;
+    }
+  }
+  gctx.stroke();
+
+  // draw trace cursor at State.graph.traceX (initially center)
+  // allow left/right arrow control for trace
+  if(State.graph.traceX === undefined) State.graph.traceX = (xmin + xmax)/2;
+  // draw crosshair
+  const tx = mapX(State.graph.traceX, xmin, xmax, w);
+  // compute y at trace
+  let traceY = null;
+  try{
+    traceY = evaluateExpression(expr, { x: State.graph.traceX, Ans: State.ans });
+    if(!isFinite(traceY)) traceY = null;
+  }catch(e){ traceY = null; }
+
+  gctx.strokeStyle = '#1a8';
+  gctx.lineWidth = 1;
+  if(traceY !== null){
+    const tpy = mapY(traceY, ymin, ymax, h);
+    gctx.beginPath();
+    gctx.moveTo(tx, 0); gctx.lineTo(tx, h); gctx.stroke();
+    gctx.beginPath();
+    gctx.moveTo(0, tpy); gctx.lineTo(w, tpy); gctx.stroke();
+
+    // draw small dot
+    gctx.fillStyle = '#1a8';
+    gctx.beginPath(); gctx.arc(tx, tpy, 4, 0, Math.PI*2); gctx.fill();
+
+    // label near top-left
+    gctx.font = '14px monospace';
+    gctx.fillStyle = '#003';
+    const label = `x=${roundTo(State.graph.traceX,4)}, y=${roundTo(traceY,6)}`;
+    gctx.fillText(label, 8, 18);
+  } else {
+    // show message
+    gctx.fillStyle = '#003';
+    gctx.font = '14px monospace';
+    gctx.fillText('Trace: value undefined at cursor', 8, 18);
+  }
+}
+
+function mapX(x, xmin, xmax, width){ return Math.round((x - xmin)/(xmax - xmin) * width); }
+function unmapX(px, xmin, xmax, width){ return xmin + (px/width)*(xmax - xmin); }
+function mapY(y, ymin, ymax, height){ return Math.round(height - (y - ymin)/(ymax - ymin) * height); }
+function unmapY(py, ymin, ymax, height){ return ymin + ((height - py)/height)*(ymax - ymin); }
+
+// arrow keys for trace movement when graph open
+window.addEventListener('keydown', (e)=>{
+  if(graphModal.classList.contains('show')){
+    if(e.key === 'ArrowLeft'){ State.graph.traceX -= (State.graph.xmax - State.graph.xmin)/200; plotGraph(); e.preventDefault(); }
+    if(e.key === 'ArrowRight'){ State.graph.traceX += (State.graph.xmax - State.graph.xmin)/200; plotGraph(); e.preventDefault(); }
+    if(e.key === 'ArrowUp'){ State.graph.traceX += 0; plotGraph(); e.preventDefault(); }
+    if(e.key === 'ArrowDown'){ State.graph.traceX += 0; plotGraph(); e.preventDefault(); }
+  } else {
+    // keyboard mapping to calculator input when graph not open
+    const keyMap = {
+      '0':'0','1':'1','2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9',
+      '+':'+','-':'-','*':'*','/':'/','Enter':'enter','.':'.'
+    };
+    if(keyMap[e.key]) handleKey(keyMap[e.key]);
+    if(e.key === 'Backspace') handleKey('del');
+  }
+});
+
+// ---------- Initialize UI state ----------
+qs('#yinput').value = State.y1;
+updateSecondVisuals();
+drawHome();
+
+</script>
+</body>
+</html>
